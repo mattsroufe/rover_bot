@@ -22,6 +22,17 @@ pixels = neopixel.NeoPixel(board.GP18, 2, brightness=0.5)
 def set_color(color):
     pixels.fill(color)
 
+def wheel(pos):
+    """Generate rainbow colors across 0–255 positions."""
+    if pos < 85:
+        return (255 - pos * 3, pos * 3, 0)
+    elif pos < 170:
+        pos -= 85
+        return (0, 255 - pos * 3, pos * 3)
+    else:
+        pos -= 170
+        return (pos * 3, 0, 255 - pos * 3)
+
 # Buzzer (Piezo)
 PIEZO_PIN = board.GP22
 
@@ -41,15 +52,22 @@ def play_melody(notes, tempo=0.12, color=None, reset_color=(0, 255, 0)):
             time.sleep(tempo)
     set_color(reset_color)  # return to normal state
 
-# Driving music melody (Fortunate Son motif)
-fortunate_melody = [
-    392, 440, 494, 392, 0,
-    392, 440, 494, 330, 0,
-    330, 370, 392, 330, 0
+# === Driving music melody (Nyan Cat loop) ===
+# Each entry is (frequency Hz, duration s).
+nyan_melody = [
+    (659, 0.15), (659, 0.15), (0, 0.15), (659, 0.15),
+    (523, 0.15), (659, 0.15), (784, 0.3),
+    (392, 0.3),
+    (523, 0.15), (392, 0.15), (330, 0.15), (440, 0.15),
+    (494, 0.15), (440, 0.15), (330, 0.15), (392, 0.15),
+    (659, 0.15), (784, 0.3), (880, 0.3),
+    (698, 0.15), (784, 0.15), (659, 0.15),
 ]
 
-def play_driving_melody_step(step_index, duration=0.12):
-    freq = fortunate_melody[step_index]
+def play_driving_melody_step(step_index, rainbow_index):
+    """Play one step of the Nyan Cat melody + rainbow LEDs."""
+    freq, duration = nyan_melody[step_index]
+    set_color(wheel(rainbow_index % 255))  # rainbow cycle
     if freq > 0:
         simpleio.tone(PIEZO_PIN, freq, duration)
     else:
@@ -57,29 +75,23 @@ def play_driving_melody_step(step_index, duration=0.12):
 
 # === Sound effects ===
 def play_startup_melody():
-    """Cheerful ascending arpeggio (power on)."""
-    notes = [523, 659, 784, 1047]  # C-E-G-C'
+    notes = [523, 659, 784, 1047]
     play_melody(notes, tempo=0.15, color=(0, 0, 255))  # Blue
 
 def play_shutdown_melody():
-    """Descending tone (power down)."""
     notes = [1047, 784, 659, 523]
     play_melody(notes, tempo=0.15, color=(128, 0, 128))  # Purple
 
 def beep_obstacle():
-    """Urgent alarm beep (obstacle ahead)."""
     play_melody([600, 500, 400], tempo=0.08, color=(255, 0, 0))  # Red
 
 def beep_turn_left():
-    """Two quick descending chirps (left turn)."""
     play_melody([700, 500, 0, 700, 500], tempo=0.07, color=(0, 0, 255))  # Blue
 
 def beep_turn_right():
-    """Two quick ascending chirps (right turn)."""
     play_melody([500, 700, 0, 500, 700], tempo=0.07, color=(0, 0, 255))  # Blue
 
 def beep_resume():
-    """Happy rising chirp (resume forward)."""
     play_melody([500, 700, 900], tempo=0.08, color=(0, 255, 0))  # Green
 
 # === Sensors ===
@@ -88,7 +100,6 @@ sonar_left  = adafruit_hcsr04.HCSR04(trigger_pin=board.GP2, echo_pin=board.GP3)
 sonar_right = adafruit_hcsr04.HCSR04(trigger_pin=board.GP7, echo_pin=board.GP28)
 
 def read_distance(sensor):
-    """Safely read sonar distance, return -1 if unavailable."""
     try:
         return sensor.distance
     except RuntimeError:
@@ -112,32 +123,29 @@ def set_motors(left_speed, right_speed):
     motor2.throttle = -right_speed if MOTOR2_REVERSED else right_speed
 
 def turn_left(duration=TURN_DURATION, speed=0.7):
-    """Turn left with LED blinking and sound."""
     beep_turn_left()
     blink_end = time.monotonic() + duration
     while time.monotonic() < blink_end:
-        set_color((0, 0, 255))  # Blue on
+        set_color((0, 0, 255))
         set_motors(speed, -speed)
         time.sleep(0.2)
-        set_color((0, 0, 0))  # Off (blink)
+        set_color((0, 0, 0))
         time.sleep(0.2)
     stop_motors()
 
 def turn_right(duration=TURN_DURATION, speed=0.7):
-    """Turn right with LED blinking and sound."""
     beep_turn_right()
     blink_end = time.monotonic() + duration
     while time.monotonic() < blink_end:
-        set_color((0, 0, 255))  # Blue on
+        set_color((0, 0, 255))
         set_motors(-speed, speed)
         time.sleep(0.2)
-        set_color((0, 0, 0))  # Off (blink)
+        set_color((0, 0, 0))
         time.sleep(0.2)
     stop_motors()
 
 # === Behaviors ===
 def read_sensors():
-    """Read all sonar sensors and return dict of distances (cm)."""
     return {
         "front": read_distance(sonar_front),
         "left":  read_distance(sonar_left),
@@ -145,23 +153,18 @@ def read_sensors():
     }
 
 def log_sensors(current_time, sensors):
-    front = sensors["front"]
-    left = sensors["left"]
-    right = sensors["right"]
-    print(f"[{current_time:.2f}s] Front: {front} cm | Left: {left} cm | Right: {right} cm")
+    print(f"[{current_time:.2f}s] Front: {sensors['front']} cm | Left: {sensors['left']} cm | Right: {sensors['right']} cm")
 
 def handle_obstacle(current_time, sensors):
-    """Handle obstacle avoidance. Returns True if obstacle was handled."""
     front, left, right = sensors["front"], sensors["left"], sensors["right"]
 
     if 0 < front < OBSTACLE_THRESHOLD_CM:
         print(f"[{current_time:.2f}s] Obstacle ahead! Stopping.")
-        set_color((255, 0, 0))  # Red
+        set_color((255, 0, 0))
         stop_motors()
         beep_obstacle()
         time.sleep(0.3)
 
-        # Pick direction
         if (left > right) or right == -1:
             print(f"[{current_time:.2f}s] Turning left (more space: {left} cm)")
             turn_left()
@@ -176,9 +179,7 @@ def handle_obstacle(current_time, sensors):
     return False
 
 def handle_wall_following(current_time, sensors):
-    """Adjust motor speeds for wall following."""
     left, right = sensors["left"], sensors["right"]
-    set_color((0, 255, 0))  # Green (normal driving)
 
     left_speed, right_speed = NORMAL_SPEED, NORMAL_SPEED
 
@@ -197,6 +198,7 @@ def main():
     print("Robot starting...")
     music_step = 0
     last_music_time = time.monotonic()
+    rainbow_index = 0
 
     while True:
         time.sleep(0.01)
@@ -207,14 +209,15 @@ def main():
         if handle_obstacle(current_time, sensors):
             continue
 
-        # Play driving melody
-        if current_time - last_music_time >= 0.12:
-            play_driving_melody_step(music_step, duration=0.1)
+        # Play Nyan Cat step & rainbow sync
+        freq, duration = nyan_melody[music_step]
+        if current_time - last_music_time >= duration:
+            play_driving_melody_step(music_step, rainbow_index)
             last_music_time = current_time
-            music_step = (music_step + 1) % len(fortunate_melody)
+            music_step = (music_step + 1) % len(nyan_melody)
+            rainbow_index = (rainbow_index + 8) % 255  # advance rainbow
 
         handle_wall_following(current_time, sensors)
-
 
 # Run program
 main()
