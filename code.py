@@ -9,8 +9,8 @@ from adafruit_motor import motor
 # === Configuration ===
 OBSTACLE_THRESHOLD_CM = 30     # Distance to stop and turn
 WALL_FOLLOW_THRESHOLD_CM = 60  # Distance to start steering correction
-NORMAL_SPEED = 0.8
-CORRECTION_SPEED = 0.5
+NORMAL_SPEED = 1.0
+CORRECTION_SPEED = 0.8
 TURN_DURATION = 0.6
 MOTOR1_REVERSED = True
 MOTOR2_REVERSED = True
@@ -40,6 +40,20 @@ def play_melody(notes, tempo=0.12, color=None, reset_color=(0, 255, 0)):
             set_color(reset_color)
             time.sleep(tempo)
     set_color(reset_color)  # return to normal state
+
+# Driving music melody (Fortunate Son motif)
+fortunate_melody = [
+    392, 440, 494, 392, 0,
+    392, 440, 494, 330, 0,
+    330, 370, 392, 330, 0
+]
+
+def play_driving_melody_step(step_index, duration=0.12):
+    freq = fortunate_melody[step_index]
+    if freq > 0:
+        simpleio.tone(PIEZO_PIN, freq, duration)
+    else:
+        time.sleep(duration)
 
 # === Sound effects ===
 def play_startup_melody():
@@ -81,9 +95,13 @@ def read_distance(sensor):
         return -1
 
 # === Motors ===
-M1A, M1B = pwmio.PWMOut(board.GP8, 10000), pwmio.PWMOut(board.GP9, 10000)
-M2A, M2B = pwmio.PWMOut(board.GP10, 10000), pwmio.PWMOut(board.GP11, 10000)
-motor1, motor2 = motor.DCMotor(M1A, M1B), motor.DCMotor(M2A, M2B)
+M1A = pwmio.PWMOut(board.GP8, frequency=10000)
+M1B = pwmio.PWMOut(board.GP9, frequency=10000)
+M2A = pwmio.PWMOut(board.GP10, frequency=10000)
+M2B = pwmio.PWMOut(board.GP11, frequency=10000)
+
+motor1 = motor.DCMotor(M1A, M1B)
+motor2 = motor.DCMotor(M2A, M2B)
 
 def stop_motors():
     motor1.throttle = 0
@@ -127,12 +145,10 @@ def read_sensors():
     }
 
 def log_sensors(current_time, sensors):
-    print(
-        f"[{current_time:.2f}s] "
-        f"Front: {sensors['front']} cm | "
-        f"Left: {sensors['left']} cm | "
-        f"Right: {sensors['right']} cm"
-    )
+    front = sensors["front"]
+    left = sensors["left"]
+    right = sensors["right"]
+    print(f"[{current_time:.2f}s] Front: {front} cm | Left: {left} cm | Right: {right} cm")
 
 def handle_obstacle(current_time, sensors):
     """Handle obstacle avoidance. Returns True if obstacle was handled."""
@@ -179,20 +195,26 @@ def handle_wall_following(current_time, sensors):
 def main():
     play_startup_melody()
     print("Robot starting...")
+    music_step = 0
+    last_music_time = time.monotonic()
 
     while True:
-        time.sleep(0.05)
+        time.sleep(0.01)
         current_time = time.monotonic()
-
         sensors = read_sensors()
         log_sensors(current_time, sensors)
 
-        # Obstacle takes priority
         if handle_obstacle(current_time, sensors):
             continue
 
-        # Otherwise wall-follow
+        # Play driving melody
+        if current_time - last_music_time >= 0.12:
+            play_driving_melody_step(music_step, duration=0.1)
+            last_music_time = current_time
+            music_step = (music_step + 1) % len(fortunate_melody)
+
         handle_wall_following(current_time, sensors)
+
 
 # Run program
 main()
