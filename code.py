@@ -53,19 +53,19 @@ def play_shutdown_melody():
     play_melody(notes, tempo=0.15, color=(128, 0, 128))  # Purple
 
 def beep_obstacle():
-    """Urgent alarm beep (🚫 obstacle)."""
+    """Urgent alarm beep (obstacle ahead)."""
     play_melody([600, 500, 400], tempo=0.08, color=(255, 0, 0))  # Red
 
 def beep_turn_left():
-    """Two quick descending chirps (↩️ left turn)."""
+    """Two quick descending chirps (left turn)."""
     play_melody([700, 500, 0, 700, 500], tempo=0.07, color=(0, 0, 255))  # Blue
 
 def beep_turn_right():
-    """Two quick ascending chirps (↪️ right turn)."""
+    """Two quick ascending chirps (right turn)."""
     play_melody([500, 700, 0, 500, 700], tempo=0.07, color=(0, 0, 255))  # Blue
 
 def beep_resume():
-    """Happy rising chirp (✅ resume forward)."""
+    """Happy rising chirp (resume forward)."""
     play_melody([500, 700, 900], tempo=0.08, color=(0, 255, 0))  # Green
 
 # === Sensors ===
@@ -139,7 +139,7 @@ def handle_obstacle(current_time, sensors):
     front, left, right = sensors["front"], sensors["left"], sensors["right"]
 
     if 0 < front < OBSTACLE_THRESHOLD_CM:
-        print(f"[{current_time:.2f}s] 🚫 Obstacle ahead! Stopping.")
+        print(f"[{current_time:.2f}s] Obstacle ahead! Stopping.")
         set_color((255, 0, 0))  # Red
         stop_motors()
         beep_obstacle()
@@ -147,14 +147,14 @@ def handle_obstacle(current_time, sensors):
 
         # Pick direction
         if (left > right) or right == -1:
-            print(f"[{current_time:.2f}s] ↩️ Turning left (more space: {left} cm)")
+            print(f"[{current_time:.2f}s] Turning left (more space: {left} cm)")
             turn_left()
         else:
-            print(f"[{current_time:.2f}s] ↪️ Turning right (more space: {right} cm)")
+            print(f"[{current_time:.2f}s] Turning right (more space: {right} cm)")
             turn_right()
 
         beep_resume()
-        print(f"[{current_time:.2f}s] ✅ Resuming forward motion...")
+        print(f"[{current_time:.2f}s] Resuming forward motion...")
         return True
 
     return False
@@ -167,10 +167,10 @@ def handle_wall_following(current_time, sensors):
     left_speed, right_speed = NORMAL_SPEED, NORMAL_SPEED
 
     if 0 < left < WALL_FOLLOW_THRESHOLD_CM:
-        print(f"[{current_time:.2f}s] ⚠️ Wall on left ({left} cm). Steering right.")
+        print(f"[{current_time:.2f}s] Wall on left ({left} cm). Steering right.")
         left_speed = CORRECTION_SPEED
     elif 0 < right < WALL_FOLLOW_THRESHOLD_CM:
-        print(f"[{current_time:.2f}s] ⚠️ Wall on right ({right} cm). Steering left.")
+        print(f"[{current_time:.2f}s] Wall on right ({right} cm). Steering left.")
         right_speed = CORRECTION_SPEED
 
     set_motors(left_speed, right_speed)
